@@ -355,6 +355,61 @@ class SyncService {
         $events = [];
         
         try {
+            // First, discover calendar collections if base URL is a calendar home
+            $calendarUrls = $this->discoverCalendars($client);
+            
+            foreach ($calendarUrls as $calUrl) {
+                $calEvents = $this->fetchEventsFromCalendar($client, $calUrl);
+                $events = array_merge($events, $calEvents);
+            }
+            return $events;
+        } catch (\Exception $e) {
+            $this->logger->error('Failed to fetch external events: ' . $e->getMessage());
+            throw $e;
+        }
+    }
+    
+    private function discoverCalendars(Client $client): array {
+        // Try PROPFIND to find calendar collections under the base URL
+        $requestBody = '<?xml version="1.0" encoding="utf-8" ?>
+            <D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+                <D:prop><D:resourcetype /></D:prop>
+            </D:propfind>';
+        try {
+            $response = $client->request('PROPFIND', '', $requestBody, [
+                'Depth' => '1', 'Content-Type' => 'application/xml'
+            ]);
+            if (!isset($response['body'])) {
+                return [''];
+            }
+            $xml = simplexml_load_string(trim($response['body']));
+            if ($xml === false) {
+                return [''];
+            }
+            $xml->registerXPathNamespace('D', 'DAV:');
+            $xml->registerXPathNamespace('C', 'urn:ietf:params:xml:ns:caldav');
+            $calendars = [];
+            foreach ($xml->xpath('//D:response') as $resp) {
+                $resp->registerXPathNamespace('d', 'DAV:');
+                $resp->registerXPathNamespace('c', 'urn:ietf:params:xml:ns:caldav');
+                $href = (string)($resp->xpath('d:href')[0] ?? '');
+                $isCal = $resp->xpath('d:propstat[d:status="HTTP/1.1 200 OK"]/d:prop/d:resourcetype/c:calendar');
+                if ($href && $isCal && count($isCal) > 0) {
+                    // Use relative path for the client
+                    $calendars[] = $href;
+                    $this->logger->debug("Discovered calendar: $href");
+                }
+            }
+            return !empty($calendars) ? $calendars : [''];
+        } catch (\Exception $e) {
+            $this->logger->debug('Calendar discovery failed, using base URL: ' . $e->getMessage());
+            return [''];
+        }
+    }
+    
+    private function fetchEventsFromCalendar(Client $client, string $calUrl): array {
+        $events = [];
+        try {
             // Use CalDAV calendar-query REPORT (standard way to list events)
             $requestBody = '<?xml version="1.0" encoding="utf-8" ?>
                 <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
@@ -374,7 +429,7 @@ class SyncService {
                 'Content-Type' => 'application/xml'
             ];
             
-            $response = $client->request('REPORT', '', $requestBody, $headers);
+            $response = $client->request('REPORT', $calUrl, $requestBody, $headers);
 
             if (isset($response['body'])) {
                 $xmlBody = $response['body'];
