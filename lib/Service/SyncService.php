@@ -355,58 +355,61 @@ class SyncService {
         $events = [];
         
         try {
-            // First, discover calendar collections if base URL is a calendar home
+            // Discover calendar collections if base URL is a calendar home
             $calendarUrls = $this->discoverCalendars($client);
-            
             foreach ($calendarUrls as $calUrl) {
                 $calEvents = $this->fetchEventsFromCalendar($client, $calUrl);
                 $events = array_merge($events, $calEvents);
             }
             return $events;
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->logger->error('Failed to fetch external events: ' . $e->getMessage());
             throw $e;
         }
     }
-    
+
     private function discoverCalendars(Client $client): array {
-        // Try PROPFIND to find calendar collections under the base URL
-        $requestBody = '<?xml version="1.0" encoding="utf-8" ?>
-            <D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-                <D:prop><D:resourcetype /></D:prop>
-            </D:propfind>';
         try {
+            $requestBody = '<?xml version="1.0" encoding="utf-8" ?>'
+                . '<D:propfind xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">'
+                . '<D:prop><D:resourcetype /></D:prop></D:propfind>';
             $response = $client->request('PROPFIND', '', $requestBody, [
                 'Depth' => '1', 'Content-Type' => 'application/xml'
             ]);
-            if (!isset($response['body'])) {
+            if (!isset($response['body']) || empty($response['body'])) {
                 return [''];
             }
-            $xml = simplexml_load_string(trim($response['body']));
+            $xml = @simplexml_load_string(trim($response['body']));
             if ($xml === false) {
                 return [''];
             }
             $xml->registerXPathNamespace('D', 'DAV:');
-            $xml->registerXPathNamespace('C', 'urn:ietf:params:xml:ns:caldav');
+            $responses = $xml->xpath('//D:response');
+            if ($responses === false) {
+                return [''];
+            }
             $calendars = [];
-            foreach ($xml->xpath('//D:response') as $resp) {
+            foreach ($responses as $resp) {
                 $resp->registerXPathNamespace('d', 'DAV:');
                 $resp->registerXPathNamespace('c', 'urn:ietf:params:xml:ns:caldav');
-                $href = (string)($resp->xpath('d:href')[0] ?? '');
+                $hrefNodes = $resp->xpath('d:href');
+                if ($hrefNodes === false || empty($hrefNodes)) {
+                    continue;
+                }
+                $href = (string)$hrefNodes[0];
                 $isCal = $resp->xpath('d:propstat[d:status="HTTP/1.1 200 OK"]/d:prop/d:resourcetype/c:calendar');
-                if ($href && $isCal && count($isCal) > 0) {
-                    // Use relative path for the client
+                if ($href && $isCal !== false && count($isCal) > 0) {
                     $calendars[] = $href;
                     $this->logger->debug("Discovered calendar: $href");
                 }
             }
             return !empty($calendars) ? $calendars : [''];
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             $this->logger->debug('Calendar discovery failed, using base URL: ' . $e->getMessage());
             return [''];
         }
     }
-    
+
     private function fetchEventsFromCalendar(Client $client, string $calUrl): array {
         $events = [];
         try {
