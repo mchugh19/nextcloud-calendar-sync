@@ -13,5 +13,6 @@ return [
         ['name' => 'config#testNewConnection',  'url' => '/api/configs/test',      'verb' => 'POST'],
         ['name' => 'config#getUserSettings',   'url' => '/api/user-settings',      'verb' => 'GET'],
         ['name' => 'config#saveUserSettings',  'url' => '/api/user-settings',      'verb' => 'PUT'],
+        ['name' => 'config#listCalendars',     'url' => '/api/calendars',          'verb' => 'GET'],
     ]
 ];

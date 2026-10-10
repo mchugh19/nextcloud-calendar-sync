@@ -18,6 +18,18 @@ class SyncService {
     private ConfigService $configService;
     private LoggerInterface $logger;
 
+    public function listUserCalendars(string $userId): array {
+        $raw = $this->calDavBackend->getCalendarsForUser('principals/users/' . $userId);
+        $result = [];
+        foreach ($raw as $cal) {
+            $result[] = [
+                'uri' => $cal['uri'] ?? '',
+                'name' => $cal['{DAV:}displayname'] ?? $cal['uri'] ?? '',
+            ];
+        }
+        return $result;
+    }
+
     public function __construct(
         IDBConnection $db,
         CalDavBackend $calDavBackend,
