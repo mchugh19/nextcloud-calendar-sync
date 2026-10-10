@@ -8,6 +8,7 @@ use OCP\IUserSession;
 use OCP\AppFramework\Http\DataResponse;
 use OCP\AppFramework\Controller;
 use OCA\CalDavSync\Service\ConfigService;
+use OCA\CalDavSync\Service\SyncService;
 use Psr\Log\LoggerInterface;
 
 class ConfigController extends Controller {
@@ -20,11 +21,26 @@ class ConfigController extends Controller {
         ConfigService $configService,
         LoggerInterface $logger,
         private IUserSession $userSession,
-        private IConfig $config
+        private IConfig $config,
+        private SyncService $syncService
     ) {
         parent::__construct($appName, $request);
         $this->configService = $configService;
         $this->logger = $logger;
+    }
+
+    /**
+     * @NoAdminRequired
+     */
+    public function listCalendars(): DataResponse {
+        try {
+            $userId = $this->getUserId();
+            $calendars = $this->syncService->listUserCalendars($userId);
+            return new DataResponse($calendars);
+        } catch (\Exception $e) {
+            $this->logger->error('Failed to list calendars: ' . $e->getMessage());
+            return new DataResponse(['error' => 'Failed to list calendars'], 500);
+        }
     }
 
     private function getUserId(): string {
