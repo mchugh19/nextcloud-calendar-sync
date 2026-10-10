@@ -252,8 +252,14 @@ style('calendar-sync', 'style');
             <div class="form-group">
                 <label for="config-calendar"><?php p($l->t('Nextcloud Calendar')); ?></label>
                 <select id="config-calendar" required>
-                    <option value="personal"><?php p($l->t('Personal (Default)')); ?></option>
-                    <option value="auto"><?php p($l->t('First Available')); ?></option>
+                    <?php if (!empty($_['calendars'])): ?>
+                        <?php foreach ($_['calendars'] as $cal): ?>
+                            <option value="<?php p($cal['uri']); ?>"><?php p($cal['name']); ?></option>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <option value="personal"><?php p($l->t('Personal (Default)')); ?></option>
+                        <option value="auto"><?php p($l->t('First Available')); ?></option>
+                    <?php endif; ?>
                 </select>
                 <small><?php p($l->t('Which Nextcloud calendar to sync with')); ?></small>
             </div>
