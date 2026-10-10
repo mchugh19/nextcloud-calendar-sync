@@ -38,6 +38,34 @@
             this.loadUserSettings().always(() => {
                 this.loadConfigs();
             });
+            this.loadCalendars();
+        },
+
+        loadCalendars: function() {
+            var self = this;
+            $.ajax({
+                url: OC.generateUrl('/apps/calendar-sync/api/calendars'),
+                method: 'GET',
+                headers: { 'requesttoken': OC.requestToken }
+            }).done(function(cals) {
+                var $sel = $('#config-calendar');
+                $sel.empty();
+                if (Array.isArray(cals) && cals.length) {
+                    cals.forEach(function(c) {
+                        $sel.append($('<option>').attr('value', c.uri).text(c.name));
+                    });
+                } else {
+                    $sel.append($('<option>').attr('value', 'personal').text('Personal (Default)'));
+                    $sel.append($('<option>').attr('value', 'auto').text('First Available'));
+                }
+                // restore saved selection if editing
+                if (self._editingCalendar) {
+                    $sel.val(self._editingCalendar);
+                    self._editingCalendar = null;
+                }
+            }).fail(function() {
+                // keep hardcoded fallback options on failure
+            });
         },
 
         bindEvents: function() {
@@ -258,7 +286,8 @@
                 $('#config-username').val(config.username);
                 $('#config-password').val('');
                 $('#config-enabled').prop('checked', config.enabled);
-                $('#config-calendar').val(config.calendar_selection || 'personal');
+                this._editingCalendar = config.calendar_selection || 'personal';
+                $('#config-calendar').val(this._editingCalendar);
                 $('#config-sync-direction').val(config.sync_direction || 'bidirectional');
                 $('#config-duplicate-handling').val(config.duplicate_handling || 'update_newer');
                 $('#config-auth-type').val(config.auth_type || 'digest');
